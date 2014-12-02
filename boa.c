@@ -47,7 +47,7 @@ static int sock_opt = 1;
 static int do_fork = 1;
 int devnullfd = -1;
 /* :TODO:Monday, December 01, 2014 11:05:49 HKT:SeanHou:  */
-void *hello_thr(void *arg)
+void *udpserver(void *arg)
 {     
     int count = 0;
     struct soap ServerSoap;
@@ -67,14 +67,13 @@ void *hello_thr(void *arg)
     mcast.imr_multiaddr.s_addr = inet_addr("239.255.255.250");
     mcast.imr_interface.s_addr = htonl(INADDR_ANY);
 
-    fprintf(stderr, "soap 1111111111111\n");
     if(setsockopt(ServerSoap.master, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char*)&mcast, sizeof(mcast)) < 0)
     {
         fprintf(stderr, "setsockopt error! error code = %d,err string = %s\n",errno,strerror(errno));
         return NULL;
     }
 
-    fprintf(stderr, "soap 2222222222222\n");
+    fprintf(stderr, "[boa:onvif] udp server\n");
     while(1)
     {
         if(soap_serve(&ServerSoap))
@@ -202,7 +201,7 @@ int main(int argc, char **argv)
  /* :TODO:Tuesday, December 02, 2014 12:21:56 HKT:SeanHou:  */
     if (0 != init_env())
     {
-        PRINT_ERR("ERROR!init_env\n");
+        fprintf(stderr, "[boa:onvif] ERROR!init_env\n");
         return -1;
     }
     
@@ -211,12 +210,11 @@ int main(int argc, char **argv)
     
     if (pthread_attr_init(&attr) < 0)
     {
-        PRINT_ERR("ERROR!attr_init\n");
+        fprintf(stderr, "[boa:onvif] ERROR!attr_init\n");
     }
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
-    pthread_create(&thread_request, &attr, hello_thr, 0);    
-//    pthread_create(&thread_request, NULL, hello_thr, 0);    
+    pthread_create(&thread_request, &attr, udpserver, NULL);    
     fprintf(stderr, "soap createover\n");
  /* :TODO:End---  */
     

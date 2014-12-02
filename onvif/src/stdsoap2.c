@@ -974,8 +974,8 @@ frecv(struct soap *soap, char *s, size_t n)
 #endif
         {
  /* :TODO:Tuesday, December 02, 2014 10:10:53 HKT:SeanHou:  */
-            extern char *ONVIF_BUFFER;
-            memcpy(s, ONVIF_BUFFER, n);
+            extern char *g_onvif_buffer;
+            memcpy(s, g_onvif_buffer, n);
             r = n;
  /* :TODO:End---  */
 //          r = recv(sk, s, (int)n, soap->socket_flags);

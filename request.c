@@ -25,7 +25,7 @@
 #include "boa.h"
 #include <stddef.h> /* for offsetof */
 
-char *ONVIF_BUFFER;
+char *g_onvif_buffer;
 
 int total_connections;
 struct status status;
@@ -372,14 +372,13 @@ just plain wrong
  /* :TODO:Monday, December 01, 2014 11:19:27 HKT:SeanHou:  */
 int lookupservices(char *service, int *lookupindex)
 {
-       int i;
+       int i=0;
        char lookup[10][30]={"device",
                       "imaging",
                       "media",
-                      "custom",
                       "onvif",
+                      "test"
                       ""};
-//   for(i = 0;lookup[i][0];i++)
        for(i = 0; i<6; i++)
        {
               if(strcasecmp(lookup[i], service) == 0)
@@ -392,7 +391,14 @@ int lookupservices(char *service, int *lookupindex)
        return 0;
 }
 
-void explodeRequest(char *in, char dl, char list[][100])
+/**
+ * @brief parse url 
+ *
+ * @param in
+ * @param dl
+ * @param list[][100]
+ */
+void url_request(char *in, char dl, char list[][100])
 {
        int i = 0;
        int j = 0;
@@ -416,14 +422,25 @@ void explodeRequest(char *in, char dl, char list[][100])
        j++;
        if(j < 3)
               **(list + j) = 0;
+       return;
 }
-int isOnvif(char *current_client_stream , char *service_uri, int *lookupindex)
+/**
+ * @brief check is onvif or not.
+ *
+ * @param current_client_stream
+ * @param service_uri
+ * @param lookupindex
+ *
+ * @return 
+ */
+int isonvif(char *current_client_stream , char *service_uri, int  *lookupindex)
 {
       
        char segments[3][100];
        char post_req[80];
        char service_name[40];
-       int service_index = 0,ret;
+       int service_index = 0;
+       int ret;
        int index_post = 0;
        int stream_index = 0;
  
@@ -437,7 +454,7 @@ int isOnvif(char *current_client_stream , char *service_uri, int *lookupindex)
  
               }
               post_req[index_post] = '\0';
-              explodeRequest(post_req, ' ', segments);
+              url_request(post_req, ' ', segments);
               index_post = 1;
               service_index = 0;
               while(segments[1][index_post] != '/' && segments[1][index_post] != '\0')
@@ -448,7 +465,7 @@ int isOnvif(char *current_client_stream , char *service_uri, int *lookupindex)
               ret = lookupservices(service_name,lookupindex);
               if(ret)
               {
-                     strcpy(service_uri,segments[1]);
+                  strcpy(service_uri,segments[1]);
               }
               return ret;
        }
@@ -475,9 +492,10 @@ void process_requests(int server_s, struct soap *soap)/*by SeanHou*/
     int OnvifEN = 0;
     int lookupindex = 0;
     char service_uri[100] = "";
+
     memset((void*)&soap->peer, 0, sizeof(soap->peer));
     soap->socket = SOAP_INVALID_SOCKET;
-    soap->error = SOAP_OK;
+    soap->error  = SOAP_OK;
     soap->errmode = 0;
     soap->keep_alive = 0;
 
@@ -498,22 +516,19 @@ void process_requests(int server_s, struct soap *soap)/*by SeanHou*/
     current = request_ready;
 
     while (current) {
-        /* :TODO:Monday, December 01, 2014 11:18:42 HKT:SeanHou:  */
-        OnvifEN = isOnvif(current->client_stream, service_uri, &lookupindex);
+        /* :TODO:Monday, December 01, 2014 11:18:42 HKT:SeanHou: juge is onvif */
+        OnvifEN = isonvif(current->client_stream, service_uri, &lookupindex);
         if(OnvifEN == 1)
         {
-            fprintf(stderr, "Warning: is onvif line[%d]remote port[%d]h2ns[%d]remote ip[%s]\n", __LINE__, current->remote_port, htons(current->remote_port), current->remote_ip_addr);
-            struct sockaddr_in onvif_remote_addr;
-            memset(&onvif_remote_addr, 0, sizeof(onvif_remote_addr));
-            onvif_remote_addr.sin_family = AF_INET;
-            onvif_remote_addr.sin_port = htons(current->remote_port);//是个随机端口
-//            onvif_remote_addr.sin_port = current->remote_port;//是个随机端口
-//            onvif_remote_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-            onvif_remote_addr.sin_addr.s_addr = inet_addr(current->remote_ip_addr);//
+            fprintf(stderr, "[boa:onvif] Warning: is onvif line[%d]remote port[%d]h2ns[%d]remote ip[%s]\n", __LINE__, current->remote_port, htons(current->remote_port), current->remote_ip_addr);
+            struct sockaddr_in onvif_client_addr;
+            memset(&onvif_client_addr, 0, sizeof(onvif_client_addr));
+            onvif_client_addr.sin_family = AF_INET;
+            onvif_client_addr.sin_port = htons(current->remote_port);//随机端口
+            onvif_client_addr.sin_addr.s_addr = inet_addr(current->remote_ip_addr);//
 
-            //soap->socket = midhnewsock;
             soap->socket = current->fd;
-            soap->peer = onvif_remote_addr;
+            soap->peer = onvif_client_addr;
             if (soap_valid_socket(soap->socket))
             {
                 soap->ip = ntohl(soap->peer.sin_addr.s_addr);
@@ -522,8 +537,8 @@ void process_requests(int server_s, struct soap *soap)/*by SeanHou*/
             }
 
 
-            ONVIF_BUFFER = (char *)soap_malloc(soap, sizeof(current->client_stream));
-            strcpy(ONVIF_BUFFER, current->client_stream);//缓冲区在frecv函数中需要把ONVIF_BUFFER中的内容再重新拷贝到soap中
+            g_onvif_buffer = (char *)soap_malloc(soap, sizeof(current->client_stream));
+            strcpy(g_onvif_buffer, current->client_stream);//mark
 
             soap_begin_recv(soap);
             if (soap_envelope_begin_in(soap))
@@ -542,11 +557,10 @@ void process_requests(int server_s, struct soap *soap)/*by SeanHou*/
             int errorCode = 0;
             if (errorCode = soap_serve_request(soap))
             {
-                fprintf(stderr, "[onvif]soap_serve_request fail, errorCode %d \n", errorCode);
+                fprintf(stderr, "[boa:onvif]soap_serve_request fail, errorCode %d \n", errorCode);
                 soap_send_fault(soap);
             }
 
-            //strcpy(current->client_stream, "");
             memset(current->client_stream, 0, CLIENT_STREAM_SIZE );
 
             soap_dealloc(soap, NULL);
